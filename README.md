@@ -29,15 +29,16 @@ Jetzt ist der Befehl `poke` im Terminal verfügbar.
 ## 🛠️ Einrichtung (einmalig pro Gerät)
 
 1. Tailscale installieren
-
-   - Linux (Manjaro):sudo pacman -Sy tailscale
-   - macOS:brew install tailscale
-   - Windows:
-     Lade den Installer von: https://tailscale.com/download
-2. Tailscale starten und anmeldensudo tailscale up
-3. zap-poke initialisierenpoke init
+   - Linux (Manjaro):   'sudo pacman -Sy tailscale'
+   - macOS:             'brew install tailscale'
+   - Windows:            Lade den Installer von: https://tailscale.com/download
+     
+2. Tailscale starten und anmelden 'sudo tailscale up'
+   
+3. zap-poke initialisieren 'poke init'
+   
 4. poke-Server starten (Nachrichten empfangen)
-   poke listen
+   'poke listen'
 
 ---
 
@@ -61,12 +62,19 @@ poke add alice 100.101.102.103
 ## 💬 Befehle im Überblick
 
 poke init                 -> Erstellt Konfigurationsdatei
+
 poke add `<name>` `<ip>`     -> Kontakt hinzufügen
+
 poke list                -> Alle Kontakte anzeigen
+
 poke remove `<name>`       -> Kontakt entfernen
+
 poke send `<name>` `<msg>`   -> Nachricht an Kontakt senden
+
 poke listen              -> Empfangsserver starten (Nachrichten empfangen)
+
 poke share               -> Eigene IP + Name als JSON ausgeben
+
 poke import '`<json>`'     -> Kontakt aus JSON importieren
 
 ---
@@ -74,11 +82,12 @@ poke import '`<json>`'     -> Kontakt aus JSON importieren
 ## 📌 Beispiel
 
 poke add bob 100.105.104.103
+poke import jane {"name": "jane", "ip": "100.101.102.108"}
 poke send bob "Hey! Bist du da?"
+poke send jane "es hat funktioniert"
 
 ---
 
 ## ⚠️ Hinweis
 
-- poke listen muss auf dem Zielgerät laufen, damit Nachrichten empfangen werden.
 - Nachrichten sind nicht verschlüsselt – nur über die sichere Tailscale-Verbindung geschützt.
