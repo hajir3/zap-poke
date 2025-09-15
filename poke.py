@@ -118,8 +118,25 @@ def cmd_send(name, msg):
         print(f"Kontakt '{name}' nicht gefunden.")
         return
     try:
+        # Get our own Tailscale IP
+        my_ip = os.popen("tailscale ip | head -n1").read().strip()
+        my_name = os.getenv("USER") or "anonymous"
+        
+        # Create a message with sender info
+        message_data = {
+            "sender_ip": my_ip,
+            "sender_name": my_name,
+            "message": msg
+        }
+        message_json = json.dumps(message_data)
+        
         with socket.create_connection((ip, PORT), timeout=5) as s:
-            s.sendall(msg.encode())
+            # Log local socket info for debugging
+            local_addr = s.getsockname()
+            remote_addr = s.getpeername()
+            print(f"DEBUG: Sende von {local_addr[0]}:{local_addr[1]} an {remote_addr[0]}:{remote_addr[1]}")
+            
+            s.sendall(message_json.encode())
         print(f"Nachricht an '{name}' gesendet.")
     except Exception as e:
         print(f"Fehler: {e}")
@@ -153,8 +170,35 @@ def show_message(msg, sender_ip):
 
 def cmd_listen():
     def handler(conn, addr):
-        msg = conn.recv(1024).decode()
-        show_message(msg, addr[0])
+        raw_msg = conn.recv(1024).decode()
+        
+        # Log detailed connection info for debugging
+        print(f"DEBUG: Verbindung erhalten von {addr[0]}:{addr[1]}")
+        
+        # Try to get more network info
+        try:
+            peer_info = conn.getpeername()
+            sock_info = conn.getsockname()
+            print(f"DEBUG: Peer info: {peer_info}, Socket info: {sock_info}")
+        except Exception as e:
+            print(f"DEBUG: Konnte Socket-Info nicht abrufen: {e}")
+        
+        # Try to parse as JSON message with sender info
+        try:
+            message_data = json.loads(raw_msg)
+            if isinstance(message_data, dict) and "sender_ip" in message_data:
+                # New format with sender info
+                sender_ip = message_data["sender_ip"]
+                sender_name = message_data.get("sender_name", "unknown")
+                message = message_data["message"]
+                print(f"DEBUG: Echte Sender-IP aus Nachricht: {sender_ip} ({sender_name})")
+                show_message(message, f"{sender_name} ({sender_ip})")
+            else:
+                # Fallback to old format
+                show_message(raw_msg, addr[0])
+        except json.JSONDecodeError:
+            # Old format - plain text message
+            show_message(raw_msg, addr[0])
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("0.0.0.0", PORT))
@@ -175,6 +219,65 @@ def cmd_import(data):
         cmd_add(entry["name"], entry["ip"])
     except:
         print("Import fehlgeschlagen.")
+
+def cmd_debug(name=None):
+    """Debug network connectivity to a contact"""
+    cfg = load_config()
+    
+    if name and name in cfg["friends"]:
+        ip = cfg["friends"][name]
+        print(f"Debug-Informationen für '{name}' ({ip}):")
+        
+        # Check routing
+        print("\n1. Route-Informationen:")
+        try:
+            route_result = subprocess.run(['route', 'get', ip], capture_output=True, text=True, timeout=5)
+            print(route_result.stdout)
+        except Exception as e:
+            print(f"Konnte Route nicht abrufen: {e}")
+        
+        # Check if it's a Tailscale IP
+        print("\n2. Tailscale-Status:")
+        try:
+            ts_result = subprocess.run(['tailscale', 'status', '--peers'], capture_output=True, text=True, timeout=5)
+            for line in ts_result.stdout.split('\n'):
+                if ip in line:
+                    print(f"Gefunden: {line}")
+        except Exception as e:
+            print(f"Konnte Tailscale-Status nicht abrufen: {e}")
+        
+        # Test connection with more detailed socket info
+        print(f"\n3. Socket-Test zu {ip}:{PORT}:")
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(5)
+                local_before = s.getsockname()
+                print(f"Lokaler Socket vor Verbindung: {local_before}")
+                
+                s.connect((ip, PORT))
+                
+                local_after = s.getsockname()
+                remote = s.getpeername()
+                print(f"Lokaler Socket nach Verbindung: {local_after}")
+                print(f"Remote Socket: {remote}")
+                
+                s.close()
+        except Exception as e:
+            print(f"Socket-Test fehlgeschlagen: {e}")
+        
+        # Test Tailscale ping
+        print(f"\n4. Tailscale Ping-Test:")
+        try:
+            ping_result = subprocess.run(['tailscale', 'ping', ip], capture_output=True, text=True, timeout=10)
+            print(ping_result.stdout)
+        except Exception as e:
+            print(f"Tailscale-Ping fehlgeschlagen: {e}")
+            
+    else:
+        print("Verfügbare Kontakte:")
+        for contact_name, contact_ip in cfg["friends"].items():
+            print(f"  {contact_name}: {contact_ip}")
+        print(f"\nVerwendung: poke debug <kontakt_name>")
 
 def cmd_help():
     print("""
@@ -204,6 +307,9 @@ def cmd_help():
 
             poke send <name> <nachricht>
                 Sendet eine Nachricht an den angegebenen Kontakt
+
+            poke debug <name>
+                Zeigt Debug-Informationen für einen Kontakt
 
             poke help  oder  poke -h
                 Zeigt diese Hilfeübersicht an
@@ -238,6 +344,11 @@ def main():
             cmd_share()
         elif cmd == "import" and len(args) == 1:
             cmd_import(args[0])
+        elif cmd == "debug":
+            if len(args) >= 1:
+                cmd_debug(args[0])
+            else:
+                cmd_debug()
         else:
             print("Unbekannter oder unvollständiger Befehl.")
     except Exception as e:
