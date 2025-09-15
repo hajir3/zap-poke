@@ -71,7 +71,7 @@ def cmd_init():
                 """
 
         plist_path.write_text(plist)
-        os.system(f"launchctl unload {plist_path} >/dev/null 2>&1")  # sicherheitshalber
+        os.system(f"launchctl unload {plist_path} >/dev/null 2>&1") 
         os.system(f"launchctl load {plist_path}")
         print("poke listener via launchd eingerichtet.")
 
@@ -125,21 +125,28 @@ def cmd_send(name, msg):
         print(f"Fehler: {e}")
 
 def show_message(msg, sender_ip):
+    import shlex
     message = f"POKE von {sender_ip}:\n\n{msg}"
     system = platform.system()
 
     if system == "Linux":
+        # Use shlex.quote for proper shell escaping
+        escaped_message = shlex.quote(message)
         if shutil.which("gnome-terminal"):
-            subprocess.Popen(f"gnome-terminal -- bash -c 'echo \"{message}\"; read -p \"Enter...\"'", shell=True)
+            subprocess.Popen(f"gnome-terminal -- bash -c 'echo {escaped_message}; read -p \"Enter...\"'", shell=True)
         elif shutil.which("xterm"):
-            subprocess.Popen(f"xterm -hold -e 'echo \"{message}\"'", shell=True)
+            subprocess.Popen(f"xterm -hold -e bash -c 'echo {escaped_message}'", shell=True)
         else:
             print(f"(Kein Terminal gefunden) Nachricht:\n{message}")
     elif system == "Darwin":
-        script = f'do script "echo \\"{message}\\"; read -n 1 -s"'
+        # Escape quotes for AppleScript and shell
+        escaped_message = shlex.quote(message)
+        script = f'do script "echo {escaped_message}; read -n 1 -s"'
         subprocess.Popen(f'osascript -e \'tell application "Terminal" to {script}\'', shell=True)
     elif system == "Windows":
-        powershell_command = f'powershell -NoExit -Command "Write-Host \'{message}\'"'
+        # Escape quotes for PowerShell
+        escaped_message = message.replace("'", "''").replace('"', '""')
+        powershell_command = f'powershell -NoExit -Command "Write-Host \'{escaped_message}\'"'
         subprocess.Popen(f'start cmd /k "{powershell_command}"', shell=True)
     else:
         print(message)
